@@ -1,8 +1,15 @@
 CompileFlags:
-    Add:
-      - --target=arm-none-eabi
-      - -mcpu=cortex-m4
-      - -mthumb
-      - -DSTM32F401xE
-    Remove:
+  Add:
+    - --target=arm-none-eabi
+    - -mcpu=cortex-m4
+    - -mthumb
+    - -DSTM32F401xE
+    - -DUSE_HAL_DRIVER
+    - -IC:/mini-rtos/Core/Inc
+    - -IC:/mini-rtos/src
+    - -IC:/mini-rtos/Drivers/STM32F4xx_HAL_Driver/Inc
+    - -IC:/mini-rtos/Drivers/STM32F4xx_HAL_Driver/Inc/Legacy
+    - -IC:/mini-rtos/Drivers/CMSIS/Device/ST/STM32F4xx/Include
+    - -IC:/mini-rtos/Drivers/CMSIS/Include
+  Remove:
     - -mno-unaligned-access

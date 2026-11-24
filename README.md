@@ -1,106 +1,33 @@
 # MiniRTOS
 
-MiniRTOS is a small educational real-time operating system kernel for ARM Cortex-M microcontrollers. Its goal is to show how tasks, separate stacks, timer interrupts, scheduling, and context switching work at a low level.
+MiniRTOS is a minimal educational kernel for the STM32 NUCLEO-F401RE (ARM Cortex-M4). It demonstrates **priority-based preemptive multitasking** with up to two user tasks, each with its own static stack. An idle task waits for interrupts when no user task is ready.
 
-The project is not intended to replace a production RTOS such as FreeRTOS.
+## Build and flash
 
-## Target Platform
+Install GNU Make and the Arm GNU Toolchain (`arm-none-eabi-gcc`). Run from the repository root on Windows:
 
-- **Architecture:** ARM Cortex-M4
-- **Recommended board:** STM32 NUCLEO-F401RE
-- **Language:** C11 with a small amount of ARM Assembly
-- **Compiler:** `arm-none-eabi-gcc`
-- **Build system:** CMake
-- **Core support:** CMSIS-Core
-- **Debugging:** GDB with OpenOCD or ST-LINK
+```sh
+mingw32-make -j4
+```
 
-## Main Features
+If the toolchain is installed somewhere other than the default in `Makefile`, pass `GCC_PATH="C:/path/to/toolchain/bin"` to the same command. Flash `build/minirtos.elf` using the board's built-in ST-LINK, then reset the board.
 
-The required version of MiniRTOS will provide:
+**Demo:** two external LEDs toggle independently: Arduino `D12` (`PA6`) every 1100 ms and `D11` (`PA7`) every 500 ms. Connect each output to an LED through its own series resistor, with the LED cathode going to `GND`. Both tasks sleep between toggles, so idle runs in between. See [the board test notes](docs/board-tests.md) for wiring and debugging.
 
-- statically created tasks;
-- a separate fixed-size stack for each task;
-- Task Control Blocks (TCBs);
-- `READY`, `RUNNING`, and `SLEEPING` task states;
-- cooperative switching with `task_yield()`;
-- preemptive Round Robin scheduling;
-- a 1 ms system tick using SysTick;
-- context switching through PendSV;
-- non-blocking task delays;
-- an idle task that can put the CPU into sleep mode;
-- basic runtime diagnostics.
+## How it works
 
-Dynamic memory allocation is not used. The maximum task count and stack sizes are selected at compile time.
+1. `main()` initializes HAL, the clock, and GPIO, then registers both tasks and starts the kernel.
+2. SVC starts the highest-priority ready task on its own process stack (`PSP`).
+3. The shared 1 ms SysTick updates the HAL tick, counts down sleeping tasks, and requests PendSV. PendSV switches to the highest-priority ready task. Equal priorities rotate round-robin. If all tasks sleep, idle executes `WFI`.
 
 ## Public API
 
-The planned public API is intentionally small:
+Register one or two tasks before calling `rtos_start()`. A larger `priority` value means higher priority. Call `task_delay()` from a task with interrupts enabled; a zero delay does nothing. Each task needs a separate, persistent, 8-byte-aligned stack. `size` is measured in `uint32_t` words, not bytes. Task entry functions must not return.
 
-```c
-rtos_init();
-task_create();
-rtos_start();
-task_yield();
-task_delay();
-rtos_get_ticks();
-```
+## Project layout
 
-Application code should use this API instead of accessing scheduler data or TCBs directly.
-
-## How Scheduling Works
-
-Ready tasks run one after another with Round Robin scheduling. SysTick updates the kernel time and requests a context switch. PendSV saves the current task context, selects the next ready task, and restores its context.
-
-Sleeping tasks are skipped until their wake-up time is reached. The idle task runs when no user task is ready.
-
-The Cortex-M port must correctly use PSP and MSP and handle the registers saved by hardware and software during exception entry and return.
-
-## Project Structure
-
-```text
-include/    Public RTOS headers
-kernel/     Tasks, scheduler, timer, and kernel state
-port/       Cortex-M context switch and exception handlers
-examples/   Demonstration applications
-tests/      Scheduler and kernel tests
-docs/       Architecture and implementation notes
-```
-
-Platform-independent kernel logic should remain separate from ARM-specific code.
-
-## Demonstration
-
-The main example will run at least three periodic tasks, such as:
-
-- a task that toggles an LED every 100 ms;
-- a task that toggles another LED every 500 ms;
-- a task that prints a UART message every 1000 ms.
-
-A separate preemption test will contain one task with an infinite calculation loop and no call to `task_yield()`. Another periodic task must continue to run, proving that timer-based preemption works.
-
-## Validation Goals
-
-The project should demonstrate:
-
-- correct task creation and independent stacks;
-- Round Robin order and voluntary yielding;
-- working SysTick and tick counting;
-- sleeping and waking without busy waiting;
-- preemption of a task that never yields;
-- idle-task execution when all user tasks sleep;
-- stable long-running context switching.
-
-## Out of Scope
-
-The required version does not include priorities, mutexes, semaphores, queues, dynamic task management, MPU isolation, networking, filesystems, POSIX support, or hard real-time guarantees.
-
-Possible future work includes CPU usage statistics, runtime task information, or simple stack-overflow detection.
-
-## Development Plan
-
-1. Create TCBs, task stacks, and a cooperative scheduler.
-2. Implement PendSV context switching and Round Robin selection.
-3. Add SysTick preemption, delays, task states, and the idle task.
-4. Test the kernel and prepare examples and documentation.
-
-The most important learning result is understanding what is stored on each task stack and how Cortex-M resumes a different task after an exception return.
+- [`Core/Src/main.c`](Core/Src/main.c) — board initialization and the two demo tasks.
+- [`Core/Src/stm32f4xx_it.c`](Core/Src/stm32f4xx_it.c) — SVC, PendSV, and SysTick entry points.
+- [`src/task.c`](src/task.c) and [`src/task.h`](src/task.h) — task registration and scheduler.
+- [`src/rtos_context.s`](src/rtos_context.s) — Cortex-M4 context save and restore.
+- `Drivers/` — STM32 HAL and CMSIS.
